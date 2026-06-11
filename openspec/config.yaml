@@ -1,0 +1,16 @@
+schema: spec-driven
+
+context: |
+  Tech stack:
+  - Java SpringBoot (业务网关层): JWT鉴权, 限流, SSE透传, 异步双写
+  - Python FastAPI + LangChain (推理算法层): RAG链路, 三路召回, LLM流式对接
+  - PostgreSQL + pgvector (Docker, 5432:5432): 全量历史对话 + 向量检索
+  - Redis (Docker, 6379:6379): Session缓存 + 滑动窗口短期记忆
+  - RabbitMQ: 削峰填谷, 异步持久化
+  - 向量数据库 (Milvus/Qdrant待选): 本地RAG知识库
+
+  Architecture principles:
+  - 前后端分离 + 业务算法分离
+  - 全链路异步流式 (TTFT优化)
+  - 三路并行召回 (短期 + 知识库 + 长期)
+  - MCP插件化 (检索/记忆/用户/审计)

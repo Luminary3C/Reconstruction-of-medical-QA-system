@@ -1,0 +1,58 @@
+import type { PythonChatRequest, SSEEvent, VerificationEvent } from '@/types/chat';
+import type { SSEChunk } from '@/types/api';
+
+const AGENT_URL = '/v1';
+
+export async function* streamChatPython(req: PythonChatRequest): AsyncGenerator<SSEEvent, void, void> {
+  const res = await fetch(`${AGENT_URL}/chat/completions`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(req),
+  });
+
+  if (!res.ok) {
+    throw new Error(`Python Agent error: ${res.status}`);
+  }
+
+  if (!req.stream) {
+    const json = await res.json() as { choices: { message: { content: string } }[] };
+    yield json.choices[0].message.content;
+    return;
+  }
+
+  const reader = res.body?.getReader();
+  if (!reader) throw new Error('no response body');
+
+  const decoder = new TextDecoder();
+  let buffer = '';
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split('\n');
+    buffer = lines.pop() ?? '';
+
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed.startsWith('data: ') || trimmed === 'data: [DONE]') continue;
+      const payload = trimmed.slice(6).trimStart();
+
+      // Check for verification event (JSON with type: "verification")
+      try {
+        const parsed = JSON.parse(payload);
+        if (parsed.type === 'verification') {
+          yield parsed as VerificationEvent;
+          continue;
+        }
+        // Normal SSE chunk
+        const chunk = parsed as SSEChunk;
+        const content = chunk.choices[0]?.delta?.content;
+        if (content) yield content;
+      } catch {
+        // skip malformed lines
+      }
+    }
+  }
+}

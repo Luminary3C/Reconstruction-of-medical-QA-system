@@ -1,0 +1,132 @@
+version: "3.8"
+
+services:
+  # ── Infrastructure ──────────────────────────────
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: rag-postgres
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: rag_db
+      POSTGRES_USER: rag_user
+      POSTGRES_PASSWORD: ${PG_PASSWORD:-123456}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./db/migrations:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U rag_user -d rag_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - rag-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: rag-redis
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - rag-network
+
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: rag-rabbitmq
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: rag_user
+      RABBITMQ_DEFAULT_PASS: ${MQ_PASSWORD:-guest}
+    volumes:
+      - mqdata:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "check_port_connectivity"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - rag-network
+
+  # ── Services ────────────────────────────────────
+  java-gateway:
+    build: ./java-gateway
+    container_name: rag-java-gateway
+    ports:
+      - "8080:8080"
+    environment:
+      SPRING_PROFILES_ACTIVE: dev
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_NAME: rag_db
+      DB_USER: rag_user
+      DB_PASSWORD: ${PG_PASSWORD:-123456}
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      MQ_HOST: rabbitmq
+      MQ_PORT: "5672"
+      MQ_USER: rag_user
+      MQ_PASSWORD: ${MQ_PASSWORD:-guest}
+      AGENT_URL: http://python-agent:8000
+      JWT_SECRET: ${JWT_SECRET:-changeme-in-production-use-env-var}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - rag-network
+
+  python-agent:
+    build: ./python-agent
+    container_name: rag-python-agent
+    ports:
+      - "8000:8000"
+    environment:
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_NAME: rag_db
+      DB_USER: rag_user
+      DB_PASSWORD: ${PG_PASSWORD:-123456}
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      LLM_BASE_URL: ${LLM_BASE_URL:-https://api.openai.com/v1}
+      LLM_API_KEY: ${LLM_API_KEY:-}
+      LLM_MODEL: ${LLM_MODEL:-gpt-4o}
+      MCP_ENABLED: "true"
+      JAVA_MCP_URL: http://java-gateway:8080/mcp
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - rag-network
+
+volumes:
+  pgdata:
+  redisdata:
+  mqdata:
+
+networks:
+  rag-network:
+    driver: bridge

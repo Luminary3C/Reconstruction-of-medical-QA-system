@@ -1,0 +1,6 @@
+spring:
+  application:
+    name: rag-gateway
+
+  profiles:
+    active: ${SPRING_PROFILES_ACTIVE:dev}

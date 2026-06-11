@@ -1,0 +1,67 @@
+spring:
+  datasource:
+    mysql:
+      url: jdbc:mysql://${DB_HOST:localhost}:${DB_PORT:3307}/${DB_NAME:rag_db}?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+      username: ${DB_USER:root}
+      password: ${DB_PASSWORD:123456}
+      driver-class-name: com.mysql.cj.jdbc.Driver
+      hikari:
+        maximum-pool-size: 5
+        minimum-idle: 2
+        connection-timeout: 30000
+        idle-timeout: 600000
+        max-lifetime: 1800000
+        pool-name: mysql-pool
+    pg:
+      url: jdbc:postgresql://${PG_HOST:localhost}:${PG_PORT:5432}/${PG_NAME:rag_db}
+      username: ${PG_USER:rag_user}
+      password: ${PG_PASSWORD:123456}
+      driver-class-name: org.postgresql.Driver
+      hikari:
+        maximum-pool-size: 5
+        minimum-idle: 2
+        connection-timeout: 30000
+        idle-timeout: 600000
+        max-lifetime: 1800000
+        pool-name: pg-pool
+
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+
+  rabbitmq:
+    host: ${MQ_HOST:localhost}
+    port: ${MQ_PORT:5672}
+    username: ${MQ_USER:guest}
+    password: ${MQ_PASSWORD:guest}
+    listener:
+      simple:
+        retry:
+          enabled: true
+          initial-interval: 1000
+          max-attempts: 3
+          multiplier: 2.0
+
+mybatis:
+  mapper-locations: classpath:mapper/*.xml
+  type-aliases-package: com.rag.gateway.model
+  configuration:
+    map-underscore-to-camel-case: true
+
+server:
+  port: ${SERVER_PORT:8080}
+
+# Python Agent endpoint
+agent:
+  python:
+    url: ${AGENT_URL:http://localhost:8001}
+
+# JWT config
+jwt:
+  secret: ${JWT_SECRET:changeme-in-production-use-env-var}
+  expiration: 86400000  # 24h
+
+logging:
+  level:
+    com.rag.gateway: DEBUG
