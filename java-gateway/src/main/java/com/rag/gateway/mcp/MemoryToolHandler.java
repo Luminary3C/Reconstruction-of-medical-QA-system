@@ -91,8 +91,30 @@ public class MemoryToolHandler {
     }
 
     public ApiResponse<?> summarizeHistory(Map<String, Object> body) {
+        String userId = (String) body.get("user_id");
+        int limit = body.get("limit") instanceof Integer i ? i : 10;
+
+        List<ChatMessage> recent = mapper.findRecentByUser(userId, limit);
+
+        if (recent.isEmpty()) {
+            Map<String, Object> result = new HashMap<>();
+            result.put("summary", "");
+            result.put("count", 0);
+            return ApiResponse.success(result);
+        }
+
+        StringBuilder sb = new StringBuilder();
+        for (ChatMessage msg : recent) {
+            sb.append("Q: ").append(msg.getQuestion()).append("\n");
+            String shortAnswer = msg.getAnswer() != null && msg.getAnswer().length() > 300
+                    ? msg.getAnswer().substring(0, 300) + "..."
+                    : msg.getAnswer();
+            sb.append("A: ").append(shortAnswer).append("\n\n");
+        }
+
         Map<String, Object> result = new HashMap<>();
-        result.put("summary", "TBD");
+        result.put("summary", sb.toString());
+        result.put("count", recent.size());
         return ApiResponse.success(result);
     }
 }

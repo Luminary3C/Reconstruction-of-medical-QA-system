@@ -19,10 +19,10 @@ class VectorStore:
             stmt = text("""
                 SELECT kc.id, kc.content, kc.chunk_index,
                        kd.title AS doc_title,
-                       1 - (kc.embedding <=> :vec::vector) AS similarity
+                       1 - (kc.embedding <=> CAST(:vec AS vector)) AS similarity
                 FROM knowledge_chunks kc
                 JOIN knowledge_documents kd ON kc.document_id = kd.id
-                ORDER BY kc.embedding <=> :vec::vector
+                ORDER BY kc.embedding <=> CAST(:vec AS vector)
                 LIMIT :top_k
             """)
             result = await session.execute(stmt, {"vec": vec_str, "top_k": top_k})
@@ -81,7 +81,7 @@ class VectorStore:
                 vec_str = "[" + ",".join(str(v) for v in emb) + "]"
                 chunk_stmt = text("""
                     INSERT INTO knowledge_chunks (document_id, chunk_index, content, embedding)
-                    VALUES (:doc_id, :idx, :content, :vec::vector)
+                    VALUES (:doc_id, :idx, :content, CAST(:vec AS vector))
                 """)
                 await session.execute(chunk_stmt, {
                     "doc_id": doc_id,

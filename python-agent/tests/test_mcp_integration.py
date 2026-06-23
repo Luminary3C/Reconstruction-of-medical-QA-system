@@ -25,13 +25,14 @@ class TestMCPIntegration:
         assert len(tokens) > 0  # LLM 应返回内容
 
     async def test_mcp_timeout_degradation(self):
-        """MCP Tool 超时降级: 不应阻塞 Agent 流程."""
-        from app.mcp.clients.retrieval_client import RetrievalMCPClient
+        """MCP Tool 超时降级: MemoryClient 未连接不应阻塞."""
+        from app.mcp.clients.memory_client import MemoryMCPClient
         import asyncio
 
-        client = RetrievalMCPClient()
+        client = MemoryMCPClient()
+        client._enabled = True
         # Client not connected → should return [] gracefully
-        result = await client.search_knowledge_base("test query")
+        result = await client.search_long_term_memory("test query", "test-user")
         assert result == []
 
     def test_mcp_disabled_flag(self):

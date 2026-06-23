@@ -48,4 +48,10 @@ public interface ChatMessageMapper {
             "FROM chat_messages WHERE user_id = #{userId} " +
             "GROUP BY session_id ORDER BY MIN(created_at) DESC")
     List<SessionSummary> findSessionsByUserId(@Param("userId") String userId);
+
+    @Select("SELECT id, user_id, session_id, question, answer, created_at " +
+            "FROM chat_messages WHERE user_id = #{userId} " +
+            "ORDER BY created_at DESC LIMIT #{limit}")
+    List<ChatMessage> findRecentByUser(@Param("userId") String userId,
+                                        @Param("limit") int limit);
 }

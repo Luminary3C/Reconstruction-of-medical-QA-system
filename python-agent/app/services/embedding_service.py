@@ -28,17 +28,13 @@ class EmbeddingService:
         Same text → same vector, values in [-1, 1], dimension = EMBEDDING_DIM.
         """
         digest = hashlib.sha256(text.encode("utf-8")).digest()
-        # Extend hash bytes to fill EMBEDDING_DIM floats
         floats: list[float] = []
         for i in range(self.EMBEDDING_DIM):
-            # Use 4 bytes per float, cycling through the 32-byte digest
+            # Use byte values directly (0-255), map to [-1, 1], avoid NaN/Inf from raw float32 decoding
             offset = (i * 4) % len(digest)
-            raw = digest[offset:offset + 4]
-            if len(raw) < 4:
-                raw = raw + digest[:4 - len(raw)]
-            val = struct.unpack("<f", raw)[0]
-            # Normalize to [-1, 1] using sin mapping (keeps order + bounded)
-            normalized = math.sin(val)
+            n = (digest[offset] << 24 | digest[(offset + 1) % 32] << 16 |
+                 digest[(offset + 2) % 32] << 8 | digest[(offset + 3) % 32])
+            normalized = (n / 0xFFFFFFFF) * 2.0 - 1.0
             floats.append(normalized)
         # Normalize to unit vector for cosine similarity correctness
         norm = math.sqrt(sum(f * f for f in floats)) or 1.0

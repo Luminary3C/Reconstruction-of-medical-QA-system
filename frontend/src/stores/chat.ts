@@ -3,12 +3,14 @@ import { ref, computed } from 'vue';
 import type { ChatMessage, Session, BackendType, SSEEvent, VerificationEvent } from '@/types/chat';
 import { streamChatPython } from '@/api/chat-python';
 import { streamChatJava, getSessions, getChatHistory } from '@/api/chat-java';
+import { uploadDocument, uploadFile, listDocuments, deleteDocument } from '@/api/knowledge';
+import type { KnowledgeDoc } from '@/api/knowledge';
 
 function newSession(): Session {
   const id = crypto.randomUUID();
   return {
     id,
-    title: 'New Chat',
+    title: '新对话',
     messages: [],
     createdAt: new Date().toISOString(),
   };
@@ -27,6 +29,39 @@ export const useChatStore = defineStore('chat', () => {
   const isStreaming = ref(false);
   const javaLoggedIn = ref(false);
   const javaUserId = ref('');
+
+  // ── Root user check ──
+  const isRoot = computed(() => javaUserId.value === 'root');
+
+  // ── Knowledge Base ──
+  const knowledgeDocs = ref<KnowledgeDoc[]>([]);
+  const knowledgeLoading = ref(false);
+
+  async function loadKnowledgeDocs() {
+    knowledgeLoading.value = true;
+    try {
+      knowledgeDocs.value = await listDocuments();
+    } catch {
+      // silently fail
+    } finally {
+      knowledgeLoading.value = false;
+    }
+  }
+
+  async function uploadKnowledgeDoc(title: string, content: string, sourceType: string) {
+    await uploadDocument(title, content, sourceType);
+    await loadKnowledgeDocs();
+  }
+
+  async function uploadKnowledgeFile(title: string, file: File, sourceType: string) {
+    await uploadFile(title, file, sourceType);
+    await loadKnowledgeDocs();
+  }
+
+  async function deleteKnowledgeDoc(docId: number) {
+    await deleteDocument(docId);
+    await loadKnowledgeDocs();
+  }
 
   // ── Active pool proxy ──
   const sessions = computed(() => backend.value === 'java' ? jvSessions.value : pySessions.value);
@@ -168,11 +203,19 @@ export const useChatStore = defineStore('chat', () => {
           }
         }
       } else {
-        for await (const token of streamChatJava({
+        for await (const event of streamChatJava({
           message: content,
           sessionId: session.id,
         })) {
-          session.messages[msgIndex].content += token;
+          if (typeof event === 'string') {
+            session.messages[msgIndex].content += event;
+          } else {
+            // Verification event — append disclaimer
+            const ve = event as VerificationEvent;
+            if (ve.disclaimer) {
+              session.messages[msgIndex].content += '\n\n' + ve.disclaimer;
+            }
+          }
         }
       }
     } catch (err) {
@@ -189,13 +232,20 @@ export const useChatStore = defineStore('chat', () => {
     isStreaming,
     javaLoggedIn,
     javaUserId,
+    isRoot,
     currentSession,
     currentMessages,
+    knowledgeDocs,
+    knowledgeLoading,
     selectSession,
     createSession,
     setBackend,
     setJavaLoggedIn,
     setJavaUserId,
     sendMessage,
+    loadKnowledgeDocs,
+    uploadKnowledgeDoc,
+    uploadKnowledgeFile,
+    deleteKnowledgeDoc,
   };
 });

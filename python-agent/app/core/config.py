@@ -31,7 +31,7 @@ class Settings(BaseSettings):
     # Embedding
     embedding_mode: str = "mock"       # "mock" or "api"
     embedding_model: str = "text-embedding-3-small"
-    embedding_dim: int = 1536
+    embedding_dim: int = 2048
 
     # Chunking
     chunk_size: int = 500
@@ -51,6 +51,11 @@ class Settings(BaseSettings):
     reranker_model: str = "BAAI/bge-reranker-v2-m3"
     reranker_top_n: int = 5
     retrieval_coarse_top_k: int = 20
+
+    # Keyword retrieval (BM25)
+    keyword_retrieval_top_k: int = 20
+    bm25_k1: float = 1.2
+    bm25_b: float = 0.75
 
     # Verification
     verification_enabled: bool = True

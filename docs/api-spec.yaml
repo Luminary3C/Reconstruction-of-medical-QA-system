@@ -1,0 +1,607 @@
+summary: true
+paths:
+  # ═══════════════════════════════════════════════════════════════
+  # Java Gateway — 鉴权、SSE 中继、会话管理
+  # ═══════════════════════════════════════════════════════════════
+
+  /api/v1/auth/login:
+    post:
+      summary: 用户登录
+      auth: none
+      servers: [java-gateway]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [username, password]
+              properties:
+                username: { type: string, description: 登录用户名 }
+                password: { type: string, description: 登录密码 }
+            example:
+              username: root
+              password: root123
+      responses:
+        "200":
+          description: 登录成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code: { type: integer, const: 200 }
+                  msg:  { type: string }
+                  data:
+                    type: object
+                    properties:
+                      token:    { type: string, description: JWT Bearer token, 有效期 24h }
+                      userId:   { type: string, description: 用户 ID }
+                      username: { type: string }
+              example:
+                code: 200
+                msg: success
+                data:
+                  token: eyJhbGciOiJIUzI1NiJ9...
+                  userId: "1"
+                  username: root
+        "401":
+          description: 用户名或密码错误
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code: { type: integer, const: 401 }
+                  msg:  { type: string }
+              example:
+                code: 401
+                msg: 用户名或密码错误
+
+  /api/v1/chat/ask:
+    post:
+      summary: 流式问答（SSE 中继到 Python Agent）
+      auth: Bearer JWT
+      servers: [java-gateway]
+      parameters:
+        - name: Authorization
+          in: header
+          required: true
+          schema: { type: string }
+          description: Bearer {jwt_token}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [message]
+              properties:
+                message:   { type: string, description: 用户问题 }
+                sessionId: { type: string, description: 会话 ID, 不传则自动生成 UUID }
+            example:
+              message: 高血压的常见病因有哪些
+              sessionId: abc-def-123
+      responses:
+        "200":
+          description: SSE 流式响应
+          content:
+            text/event-stream:
+              schema:
+                description: |
+                  SSE 事件流，包含两种事件类型:
+
+                  1. 普通 token 流（无 event 名）:
+                  ```
+                  data: <token>
+                  ```
+
+                  2. 校验免责声明（named event）:
+                  ```
+                  event: verification
+                  data: {"type":"verification","disclaimer":"> ⚠️ ...","confidence":"low"}
+                  ```
+
+                  流结束标记:
+                  ```
+                  data: [DONE]
+                  ```
+        "401": { description: Token 无效或过期, content: { application/json: { schema: { type: object, properties: { code: { const: 401 }, msg: { type: string } } } } } }
+        "429": { description: 限流（每分钟 30 次）, content: { application/json: { schema: { type: object, properties: { code: { const: 429 }, msg: { const: rate limited } } } } } }
+
+  /api/v1/chat/sessions:
+    get:
+      summary: 获取用户会话列表
+      auth: Bearer JWT
+      servers: [java-gateway]
+      responses:
+        "200":
+          description: 成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code: { const: 200 }
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        sessionId:    { type: string }
+                        title:        { type: string, description: 首条问题截断 30 字 }
+                        createdAt:    { type: string, format: date-time }
+                        messageCount: { type: integer }
+              example:
+                code: 200
+                data:
+                  - sessionId: abc-123
+                    title: 高血压的常见病因有哪些
+                    createdAt: "2026-06-15T10:30:00"
+                    messageCount: 4
+
+  /api/v1/chat/history/{sessionId}:
+    get:
+      summary: 获取会话历史消息
+      auth: Bearer JWT
+      servers: [java-gateway]
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: 成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code: { const: 200 }
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id:        { type: integer }
+                        userId:    { type: string }
+                        sessionId: { type: string }
+                        question:  { type: string }
+                        answer:    { type: string }
+                        createdAt: { type: string, format: date-time }
+    delete:
+      summary: 删除会话（当前为占位实现，返回成功但不实际删除）
+      auth: Bearer JWT
+      servers: [java-gateway]
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code: { const: 200 }
+                  data: { type: "null" }
+
+  # ═══════════════════════════════════════════════════════════════
+  # Python Agent — AI 核心问答 + 知识库管理（内网，Java 调用）
+  # ═══════════════════════════════════════════════════════════════
+
+  /v1/chat/completions:
+    post:
+      summary: OpenAI 兼容的聊天补全（流式 + 非流式），由 Java Gateway 内网调用
+      auth: none (内网, 由 Java JWT 层保护)
+      servers: [python-agent]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [messages]
+              properties:
+                messages:
+                  type: array
+                  items:
+                    type: object
+                    required: [role, content]
+                    properties:
+                      role:    { type: string, enum: [user, assistant, system] }
+                      content: { type: string }
+                stream:
+                  type: boolean
+                  default: true
+                  description: true=SSE 流式, false=一次性返回完整 JSON
+                user_id:
+                  type: string
+                  description: 用户标识，默认 "anonymous"
+                session_id:
+                  type: string
+                  description: 会话标识，不传则自动生成
+                short_term_context:
+                  type: array
+                  items: { type: string }
+                  default: []
+                  description: Redis 滑动窗口中的近期对话
+            example:
+              messages:
+                - role: user
+                  content: 高血压的常见病因有哪些
+              stream: true
+              user_id: "1"
+              session_id: abc-123
+              short_term_context:
+                - "Q: 你好 | A: 你好，有什么可以帮助你的？"
+      responses:
+        "200":
+          description: |
+            **流式模式** (stream=true): SSE `text/event-stream`
+
+            SSE 事件类型:
+            1. 普通 LLM token 块 (OpenAI 格式):
+            ```
+            data: {"id":"chatcmpl-xxx","object":"chat.completion.chunk","created":1718000000,"model":"gpt-4o","choices":[{"index":0,"delta":{"content":"高"},"finish_reason":null}]}
+            ```
+
+            2. Gate 拒绝/追问 (model=gatekeeper):
+            ```
+            data: {"id":"...","object":"chat.completion.chunk","model":"gatekeeper","choices":[{"index":0,"delta":{"content":"抱歉，我不能提供..."},"finish_reason":null}]}
+            ```
+
+            3. Verification 校验免责声明:
+            ```
+            data: {"type":"verification","disclaimer":"> ⚠️ ...","confidence":"low"}
+            ```
+
+            4. 流结束:
+            ```
+            data: {"id":"...","choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}
+            data: [DONE]
+            ```
+
+            **非流式模式** (stream=false): 标准 JSON
+          headers:
+            X-Session-Id:
+              schema: { type: string }
+              description: 会话 ID
+            X-Gate-Intent:
+              schema: { type: string, enum: [simple, history, clarify, reject] }
+              description: GateKeeper 意图分类结果
+
+  /v1/knowledge/upload:
+    post:
+      summary: 上传知识库文档（文本切分 → 批量 Embedding → 写入 pgvector）
+      auth: none (内网)
+      servers: [python-agent]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [title, content]
+              properties:
+                title:       { type: string, description: 文档标题 }
+                content:     { type: string, description: 文档全文 }
+                source_type: { type: string, default: text, enum: [text, pdf, url] }
+            example:
+              title: 高血压诊疗指南2024
+              content: "高血压定义为...（长文本）"
+              source_type: text
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code: { const: 200 }
+                  msg:  { const: success }
+                  data:
+                    type: object
+                    properties:
+                      document_id: { type: integer }
+              example:
+                code: 200
+                msg: success
+                data: { document_id: 1 }
+
+  /v1/knowledge/documents:
+    get:
+      summary: 列出所有知识库文档
+      auth: none (内网)
+      servers: [python-agent]
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code: { const: 200 }
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        source_id:   { type: integer }
+                        name:        { type: string }
+                        source_type: { type: string }
+                        doc_count:   { type: integer }
+                        created_at:  { type: string }
+              example:
+                code: 200
+                msg: success
+                data:
+                  - source_id: 1
+                    name: 高血压诊疗指南2024
+                    source_type: text
+                    doc_count: 15
+                    created_at: "2026-06-15T12:00:00"
+
+  /v1/knowledge/documents/{doc_id}:
+    delete:
+      summary: 删除知识库文档（级联删除所有 chunk）
+      auth: none (内网)
+      servers: [python-agent]
+      parameters:
+        - name: doc_id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code: { const: 200 }
+                  data: { type: "null" }
+        "404":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code: { const: 404 }
+                  msg:  { const: document not found }
+
+  # ═══════════════════════════════════════════════════════════════
+  # Java MCP — Python Agent 回调的内部端点
+  # ═══════════════════════════════════════════════════════════════
+
+  /mcp/memory/tools/search_long_term_memory:
+    post:
+      summary: 长期记忆向量检索（Python Agent 回调）
+      auth: none (内网 MCP, SecurityConfig 放行)
+      servers: [java-gateway]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [query, user_id, embedding]
+              properties:
+                query:     { type: string, description: 检索查询 }
+                user_id:   { type: string }
+                top_k:     { type: integer, default: 10 }
+                embedding: { type: string, description: 查询向量（逗号分隔浮点数） }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code: { const: 200 }
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        memory_id: { type: string }
+                        content:   { type: string, description: Q: ... | A: ...（摘要截断 200 字） }
+                        score:     { type: number }
+                        timestamp: { type: string }
+
+  /mcp/memory/tools/save_conversation:
+    post:
+      summary: 异步持久化对话（Python Agent 回调 → RabbitMQ → PG）
+      auth: none (内网 MCP)
+      servers: [java-gateway]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [user_id, question, answer]
+              properties:
+                user_id:  { type: string }
+                question: { type: string }
+                answer:   { type: string }
+                embedding: { type: string, description: 拼接后的 Q+A 向量 }
+                metadata:  { type: object, description: 含 session_id }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code: { const: 200 }
+                  data:
+                    type: object
+                    properties:
+                      conversation_id: { type: string }
+
+  /mcp/memory/tools/summarize_history:
+    post:
+      summary: 汇总用户近期对话历史
+      auth: none (内网 MCP)
+      servers: [java-gateway]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [user_id]
+              properties:
+                user_id: { type: string }
+                limit:   { type: integer, default: 10 }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code: { const: 200 }
+                  data:
+                    type: object
+                    properties:
+                      summary: { type: string, description: Q: ...\nA: ... 格式拼接 }
+                      count:   { type: integer }
+
+  /mcp/audit/tools/audit_log:
+    post:
+      summary: 审计日志上报（支持 chat_complete / gate_reject / gate_clarify / agent_trace）
+      auth: none (内网 MCP)
+      servers: [java-gateway]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [event_type, user_id, detail]
+              properties:
+                event_type:
+                  type: string
+                  enum: [chat_complete, gate_reject, gate_clarify, agent_trace]
+                user_id: { type: string }
+                detail:
+                  type: object
+                  description: |
+                    普通事件: {intent, session_id, rewritten_query, verification}
+                    agent_trace 事件: TraceContext.model_dump() 完整 trace JSON
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code: { const: 200 }
+                  data:
+                    type: object
+                    properties:
+                      ack: { type: boolean }
+
+  /mcp/user/resources/user/{userId}/profile:
+    get:
+      summary: 获取用户资料
+      auth: none (内网 MCP)
+      servers: [java-gateway]
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code: { const: 200 }
+                  data:
+                    type: object
+                    properties:
+                      name:        { type: string }
+                      preferences: { type: object }
+                      plan:        { type: string }
+        "404":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code: { const: 404 }
+                  msg:  { const: user not found }
+
+  /mcp/user/resources/user/{userId}/permissions:
+    get:
+      summary: 获取用户权限
+      auth: none (内网 MCP)
+      servers: [java-gateway]
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code: { const: 200 }
+                  data:
+                    type: object
+                    properties:
+                      roles:  { type: array, items: { type: string } }
+                      scopes: { type: array, items: { type: string } }
+              example:
+                code: 200
+                msg: success
+                data:
+                  roles: [user]
+                  scopes: ["chat:read", "chat:write"]
+
+# ═══════════════════════════════════════════════════════════════
+# 全局说明
+# ═══════════════════════════════════════════════════════════════
+servers:
+  - name: java-gateway
+    url: http://localhost:8080
+    description: Spring Boot 网关，处理鉴权、SSE 中继、MCP 工具宿主
+  - name: python-agent
+    url: http://localhost:8000
+    description: FastAPI Agent，处理 GateKeeper/检索/生成/校验
+
+info:
+  title: 医疗问答系统 API
+  version: "1.0.0"
+  description: |
+    ## 鉴权方式
+    - `/api/v1/auth/login` — 无需鉴权
+    - `/api/v1/chat/**` — Bearer JWT（前端传入 Authorization header）
+    - `/v1/**` — 内网无鉴权（由 Java Gateway 代理调用）
+    - `/mcp/**` — 内网无鉴权（SecurityConfig 放行，Python Agent 回调）
+
+    ## 响应格式
+    所有接口（除 SSE 流外）统一使用 `ApiResponse` 格式:
+    ```json
+    {"code": 200, "msg": "success", "data": ...}
+    ```
+
+    ## 数据流
+    ```
+    前端 (JWT) → Java ChatController → Python /v1/chat/completions (SSE)
+                                    → Java AsyncWriteService → Redis 滑动窗口
+                  Python _post_process → Java MCP save_conversation → RabbitMQ → PG
+                  Python _post_process → Java MCP audit_log → agent_traces PG
+    前端 (JWT) → Java ChatHistoryController → PG 查询
+    ```

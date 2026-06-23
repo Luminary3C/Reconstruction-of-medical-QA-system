@@ -1,4 +1,7 @@
 import re
+import json
+import httpx
+from openai import AsyncOpenAI
 from app.core.config import settings
 
 
@@ -8,8 +11,21 @@ class RerankerService:
     Modes:
       - mock: rule-based scoring (similarity + keyword overlap)
       - local: sentence-transformers cross-encoder (bge-reranker-v2-m3)
-      - api: external rerank API (Cohere, Jina, etc.)
+      - api: LLM-based batch scoring via Flash model
     """
+
+    def __init__(self):
+        self._client: AsyncOpenAI | None = None
+
+    @property
+    def client(self) -> AsyncOpenAI:
+        if self._client is None:
+            self._client = AsyncOpenAI(
+                base_url=settings.llm_base_url,
+                api_key=settings.llm_api_key or "sk-placeholder",
+                timeout=httpx.Timeout(15.0, connect=5.0),
+            )
+        return self._client
 
     async def rerank(
         self,
@@ -81,7 +97,13 @@ class RerankerService:
         except Exception:
             return self._mock_rerank(query, documents, top_n, content_key)
 
-    # ── API: external rerank service ──
+    # ── API: LLM-based batch scoring ──
+
+    _SCORE_PROMPT = """Score each document's relevance to the user query on a scale of 0-10.
+- 10 = directly answers the query
+- 5 = partially related
+- 0 = completely irrelevant
+Return ONLY a JSON array of scores like [8.5, 2.0, 9.0]. No explanation."""
 
     async def _api_rerank(
         self,
@@ -90,8 +112,53 @@ class RerankerService:
         top_n: int,
         content_key: str,
     ) -> list[dict]:
-        # Placeholder — replace with actual API integration (Cohere, Jina, etc.)
-        return self._mock_rerank(query, documents, top_n, content_key)
+        if not documents:
+            return []
+
+        # Limit to top 15 docs to keep prompt size reasonable
+        batch = documents[:15]
+        if len(batch) <= 1:
+            batch[0]["rerank_score"] = 10.0
+            return batch[:top_n]
+
+        # Truncate each doc to 300 chars for scoring
+        docs_text = "\n\n".join(
+            f"Doc{i}: {doc.get(content_key, '')[:300]}"
+            for i, doc in enumerate(batch)
+        )
+        user_prompt = (
+            f"Query: {query}\n\n"
+            f"{docs_text}\n\n"
+            f"Score:"
+        )
+
+        try:
+            response = await self.client.chat.completions.create(
+                model=settings.gatekeeper_model or settings.llm_model,
+                messages=[
+                    {"role": "system", "content": self._SCORE_PROMPT},
+                    {"role": "user", "content": user_prompt},
+                ],
+                temperature=0.0,
+                max_tokens=80,
+            )
+
+            raw = response.choices[0].message.content.strip()
+            # Extract JSON array from response
+            match = re.search(r"\[[\d.,\s]+\]", raw)
+            if match:
+                scores = json.loads(match.group())
+            else:
+                return self._mock_rerank(query, documents, top_n, content_key)
+
+            # Assign scores back
+            for i, doc in enumerate(batch):
+                doc["rerank_score"] = float(scores[i]) if i < len(scores) else 0.0
+
+            batch.sort(key=lambda d: d["rerank_score"], reverse=True)
+            return batch[:top_n]
+        except Exception:
+            return self._mock_rerank(query, documents, top_n, content_key)
 
     # ── Utils ──
 

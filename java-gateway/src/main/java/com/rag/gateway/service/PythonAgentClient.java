@@ -82,6 +82,13 @@ public class PythonAgentClient {
 
                     try {
                         JsonNode node = objectMapper.readTree(jsonStr);
+
+                        // Check for verification event from Python Agent
+                        if ("verification".equals(node.path("type").asText())) {
+                            emitter.send(SseEmitter.event().name("verification").data(jsonStr));
+                            return;
+                        }
+
                         JsonNode content = node.at("/choices/0/delta/content");
                         if (!content.isMissingNode() && !content.isNull()) {
                             String token = content.asText();

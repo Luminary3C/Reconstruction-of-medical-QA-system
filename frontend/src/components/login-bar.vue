@@ -17,7 +17,6 @@ const password = ref('');
 const error = ref('');
 const loading = ref(false);
 
-// 页面加载时检查是否有已保存的 token 和用户名
 onMounted(() => {
   const savedUsername = localStorage.getItem('jwt-username');
   const token = localStorage.getItem('jwt-token');
@@ -36,8 +35,10 @@ async function handleLogin() {
     localStorage.setItem('jwt-username', res.username);
     store.setJavaLoggedIn(true);
     store.setJavaUserId(res.username);
+    username.value = '';
+    password.value = '';
   } catch (err) {
-    error.value = err instanceof Error ? err.message : 'login failed';
+    error.value = err instanceof Error ? err.message : '登录失败';
   } finally {
     loading.value = false;
   }
@@ -54,26 +55,27 @@ function handleLogout() {
 <template>
   <div class="login-bar">
     <template v-if="store.javaLoggedIn">
-      <span class="login-status">Logged in as {{ store.javaUserId }}</span>
-      <button class="login-btn logout" @click="handleLogout">Logout</button>
+      <span class="login-status">已登录：<strong>{{ store.javaUserId }}</strong></span>
+      <span v-if="store.isRoot" class="admin-badge">管理员</span>
+      <button class="login-btn logout" @click="handleLogout">退出</button>
     </template>
     <template v-else>
       <input
         v-model="username"
         class="login-input"
-        placeholder="Username"
+        placeholder="用户名"
         :disabled="loading"
       />
       <input
         v-model="password"
         class="login-input"
         type="password"
-        placeholder="Password"
+        placeholder="密码"
         :disabled="loading"
         @keydown.enter="handleLogin"
       />
       <button class="login-btn" :disabled="loading" @click="handleLogin">
-        {{ loading ? '...' : 'Login' }}
+        {{ loading ? '...' : '登录' }}
       </button>
       <span v-if="error" class="login-error">{{ error }}</span>
     </template>
@@ -86,40 +88,58 @@ function handleLogout() {
   align-items: center;
   gap: 8px;
   padding: 6px 16px;
-  background: #0f3460;
-  border-bottom: 1px solid #1a508b;
+  background: #f8fafc;
+  border-bottom: 1px solid #dde4ed;
+  flex: 1;
+  justify-content: flex-end;
 }
 .login-status {
-  color: #4ecdc4;
+  color: #475569;
   font-size: 13px;
+}
+.login-status strong {
+  color: #2c6fce;
+}
+.admin-badge {
+  background: #0ea882;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 10px;
+  text-transform: uppercase;
 }
 .login-input {
-  padding: 4px 8px;
-  border: 1px solid #444;
-  border-radius: 4px;
-  background: #1a1a2e;
-  color: #eee;
+  padding: 6px 10px;
+  border: 1px solid #d0d7e0;
+  border-radius: 6px;
+  background: #fff;
+  color: #1e293b;
   font-size: 13px;
-  width: 120px;
+  width: 130px;
   outline: none;
+  transition: border-color 0.15s;
 }
+.login-input:focus { border-color: #2c6fce; }
 .login-btn {
-  padding: 4px 12px;
+  padding: 6px 14px;
   border: none;
-  border-radius: 4px;
-  background: #e94560;
+  border-radius: 6px;
+  background: #2c6fce;
   color: #fff;
   font-size: 13px;
+  font-weight: 500;
   cursor: pointer;
+  transition: background 0.15s;
 }
 .login-btn.logout {
-  background: #444;
+  background: #e8edf2;
+  color: #64748b;
 }
-.login-btn:hover:not(:disabled) {
-  opacity: 0.85;
-}
+.login-btn:hover:not(:disabled) { background: #1a5ab8; }
+.login-btn.logout:hover { background: #dde4ed; color: #475569; }
 .login-error {
-  color: #ff6b6b;
+  color: #e74c3c;
   font-size: 12px;
 }
 </style>

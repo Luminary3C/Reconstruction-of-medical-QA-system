@@ -1,4 +1,5 @@
-from fastapi import APIRouter
+import io
+from fastapi import APIRouter, UploadFile, File, Form
 from pydantic import BaseModel
 from app.db.vector_store import VectorStore
 
@@ -16,6 +17,30 @@ class UploadRequest(BaseModel):
 @router.post("/knowledge/upload")
 async def upload(req: UploadRequest):
     doc_id = await vector_store.add_document(req.title, req.content, req.source_type)
+    return {"code": 200, "msg": "success", "data": {"document_id": doc_id}}
+
+
+def _extract_text(filename: str, content: bytes) -> str:
+    ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
+    if ext == "docx":
+        from docx import Document
+        doc = Document(io.BytesIO(content))
+        return "\n".join(p.text for p in doc.paragraphs)
+    if ext == "pdf":
+        return content.decode("utf-8", errors="replace")
+    return content.decode("utf-8", errors="replace")
+
+
+@router.post("/knowledge/upload-file")
+async def upload_file(
+    title: str = Form(...),
+    source_type: str = Form("text"),
+    file: UploadFile = File(...),
+):
+    filename = file.filename or "unknown"
+    content = await file.read()
+    text = _extract_text(filename, content)
+    doc_id = await vector_store.add_document(title, text, source_type)
     return {"code": 200, "msg": "success", "data": {"document_id": doc_id}}
 
 

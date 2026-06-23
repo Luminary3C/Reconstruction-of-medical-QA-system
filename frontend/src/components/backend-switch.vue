@@ -17,7 +17,7 @@ function onChange(e: Event) {
 
 <template>
   <div class="backend-switch">
-    <label class="backend-label">Backend:</label>
+    <label class="backend-label">后端：</label>
     <select class="backend-select" :value="store.backend" @change="onChange">
       <option v-for="o in options" :key="o.value" :value="o.value">{{ o.label }}</option>
     </select>
@@ -30,30 +30,23 @@ function onChange(e: Event) {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 8px 16px;
-  background: #1a1a2e;
-  border-bottom: 1px solid #333;
 }
 .backend-label {
   font-size: 13px;
-  color: #888;
+  color: #64748b;
 }
 .backend-select {
-  padding: 4px 8px;
-  border: 1px solid #444;
-  border-radius: 4px;
-  background: #16213e;
-  color: #eee;
+  padding: 6px 10px;
+  border: 1px solid #d0d7e0;
+  border-radius: 6px;
+  background: #fff;
+  color: #1e293b;
   font-size: 13px;
   outline: none;
 }
 .backend-indicator {
   font-size: 10px;
 }
-.backend-indicator.python {
-  color: #4ecdc4;
-}
-.backend-indicator.java {
-  color: #ff6b6b;
-}
+.backend-indicator.python { color: #2c6fce; }
+.backend-indicator.java { color: #e74c3c; }
 </style>

@@ -41,6 +41,8 @@ export interface VerificationEvent {
 }
 
 export type SSEEvent = string | VerificationEvent;
+
+export interface JavaSessionSummary {
   sessionId: string;
   title: string;
   createdAt: string;
