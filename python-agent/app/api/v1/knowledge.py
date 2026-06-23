@@ -27,7 +27,12 @@ def _extract_text(filename: str, content: bytes) -> str:
         doc = Document(io.BytesIO(content))
         return "\n".join(p.text for p in doc.paragraphs)
     if ext == "pdf":
-        return content.decode("utf-8", errors="replace")
+        import fitz
+        text_parts: list[str] = []
+        with fitz.open(stream=content, filetype="pdf") as doc:
+            for page in doc:
+                text_parts.append(page.get_text())
+        return "\n".join(text_parts)
     return content.decode("utf-8", errors="replace")
 
 
