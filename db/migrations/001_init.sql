@@ -9,7 +9,7 @@ CREATE TABLE IF NOT EXISTS chat_messages (
     session_id  VARCHAR(100) NOT NULL,
     question    TEXT NOT NULL,
     answer      TEXT NOT NULL,
-    embedding   vector(2048),
+    embedding   vector(1536),
     created_at  TIMESTAMP DEFAULT NOW()
 );
 

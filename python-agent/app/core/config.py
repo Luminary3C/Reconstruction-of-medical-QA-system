@@ -31,7 +31,7 @@ class Settings(BaseSettings):
     # Embedding
     embedding_mode: str = "mock"       # "mock" or "api"
     embedding_model: str = "text-embedding-3-small"
-    embedding_dim: int = 2048
+    embedding_dim: int = 1536
 
     # Chunking
     chunk_size: int = 500
