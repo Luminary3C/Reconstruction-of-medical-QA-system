@@ -1,9 +1,17 @@
+import logging
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from app.api.v1.chat import router as chat_router
 from app.api.v1.knowledge import router as knowledge_router
 from app.core.config import settings
 from app.services.agent_service import AgentService
+
+# Configure logging to output to console
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S',
+)
 
 
 @asynccontextmanager

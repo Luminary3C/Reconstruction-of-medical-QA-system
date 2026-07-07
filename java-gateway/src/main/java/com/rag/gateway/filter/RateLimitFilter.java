@@ -14,7 +14,7 @@ import java.util.Set;
 @Component
 public class RateLimitFilter extends OncePerRequestFilter {
 
-    private static final int MAX_BODY_SIZE = 10 * 1024; // 10KB
+    private static final int MAX_BODY_SIZE = 256 * 1024; // 256KB
 
     private final RedisService redisService;
 
