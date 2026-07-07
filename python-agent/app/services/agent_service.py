@@ -368,7 +368,7 @@ class AgentService:
             latency_ms=round((time.time() - t2) * 1000, 1),
         )
 
-        disclaimer = self._build_disclaimer(verification_result)
+        disclaimer = self._build_disclaimer(verification_result, gate, rag_docs)
         if disclaimer:
             yield {"type": "verification", "disclaimer": disclaimer, "confidence": trace.verification.confidence}
 
@@ -489,18 +489,35 @@ class AgentService:
             pass
 
     @staticmethod
-    def _build_disclaimer(verification_result) -> str:
+    def _build_disclaimer(verification_result, gate, rag_docs) -> str:
+        """动态生成免责声明：根据安全违规、置信度、是否有知识库检索结果来调整内容。"""
         if not verification_result:
             return ""
+
         parts = []
+
+        # ── 安全违规：逐条列出具体问题 ──
         if not verification_result.passed:
-            parts.append("\u26a0\ufe0f \u6b64\u56de\u7b54\u5b58\u5728\u6f5c\u5728\u5b89\u5168\u98ce\u9669\uff0c\u8bf7\u52a1\u5fc5\u54a8\u8be2\u4e13\u4e1a\u533b\u751f\u3002")
+            if verification_result.safety_violations:
+                parts.append("\u26a0\ufe0f " + "\uff1b".join(verification_result.safety_violations[:3]))
+            elif verification_result.warnings:
+                parts.append("\u26a0\ufe0f " + " \uff1b".join(verification_result.warnings[:3]))
+            else:
+                parts.append("\u26a0\ufe0f \u6b64\u56de\u7b54\u5b58\u5728\u6f5c\u5728\u5b89\u5168\u98ce\u9669\uff0c\u8bf7\u52a1\u5fc5\u54a8\u8be2\u4e13\u4e1a\u533b\u751f\u3002")
+
+        # ── 置信度：根据是否有 RAG 结果给出不同的说明 ──
         if verification_result.confidence == "low":
-            parts.append("\U0001f4cc \u4ee5\u4e0a\u4fe1\u606f\u77e5\u8bc6\u5e93\u8986\u76d6\u4e0d\u8db3\uff0c\u4ec5\u4f9b\u53c2\u8003\uff0c\u5efa\u8bae\u54a8\u8be2\u4e13\u4e1a\u533b\u751f\u83b7\u53d6\u51c6\u786e\u5efa\u8bae\u3002")
+            if rag_docs:
+                parts.append("\U0001f4cc \u77e5\u8bc6\u5e93\u76f8\u5173\u5185\u5bb9\u6709\u9650\uff0c\u4ee5\u4e0a\u4fe1\u606f\u4ec5\u4f9b\u53c2\u8003\u3002")
+            else:
+                parts.append("\U0001f4cc \u672a\u68c0\u7d22\u5230\u76f8\u5173\u77e5\u8bc6\u5e93\u6587\u732e\uff0c\u4ee5\u4e0a\u56de\u7b54\u57fa\u4e8e\u901a\u7528\u533b\u5b66\u77e5\u8bc6\uff0c\u4ec5\u4f9b\u53c2\u8003\u3002")
         elif verification_result.confidence == "medium":
-            parts.append("\U0001f4cb \u4ee5\u4e0a\u4fe1\u606f\u90e8\u5206\u6765\u6e90\u8986\u76d6\u4e0d\u5b8c\u6574\uff0c\u4ec5\u4f9b\u53c2\u8003\u3002")
+            parts.append("\U0001f4cb \u90e8\u5206\u4fe1\u606f\u6765\u6e90\u8986\u76d6\u4e0d\u5b8c\u6574\uff0c\u4ec5\u4f9b\u53c2\u8003\u3002")
+
+        # ── 一切正常（高置信度 + 无安全违规）→ 不显示声明 ──
         if not parts:
             return ""
+
         lines = "> " + "\n> ".join(parts)
         return f"\n\n---\n{lines}"
 
