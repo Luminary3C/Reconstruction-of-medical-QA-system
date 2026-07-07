@@ -14,7 +14,7 @@ CREATE TABLE IF NOT EXISTS knowledge_chunks (
     document_id  BIGINT REFERENCES knowledge_documents(id) ON DELETE CASCADE,
     chunk_index  INT NOT NULL,
     content      TEXT NOT NULL,
-    embedding    vector(1536),
+    embedding    vector(2048),
     created_at   TIMESTAMP DEFAULT NOW()
 );
 
