@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
-import type { ChatMessage, Session, BackendType, SSEEvent, VerificationEvent } from '@/types/chat';
+import type { ChatMessage, Session, BackendType, SSEEvent, VerificationEvent, SourcesEvent } from '@/types/chat';
 import { streamChatPython } from '@/api/chat-python';
 import { streamChatJava, getSessions, getChatHistory } from '@/api/chat-java';
 import { uploadDocument, uploadFile, listDocuments, deleteDocument } from '@/api/knowledge';
@@ -194,12 +194,16 @@ export const useChatStore = defineStore('chat', () => {
         })) {
           if (typeof event === 'string') {
             session.messages[msgIndex].content += event;
-          } else {
+          } else if (event.type === 'verification') {
             // Verification event — append disclaimer
             const ve = event as VerificationEvent;
             if (ve.disclaimer) {
               session.messages[msgIndex].content += '\n\n' + ve.disclaimer;
             }
+          } else if (event.type === 'sources') {
+            // Sources event — store knowledge sources
+            const se = event as SourcesEvent;
+            session.messages[msgIndex].sources = se.sources;
           }
         }
       } else {
@@ -209,12 +213,16 @@ export const useChatStore = defineStore('chat', () => {
         })) {
           if (typeof event === 'string') {
             session.messages[msgIndex].content += event;
-          } else {
+          } else if (event.type === 'verification') {
             // Verification event — append disclaimer
             const ve = event as VerificationEvent;
             if (ve.disclaimer) {
               session.messages[msgIndex].content += '\n\n' + ve.disclaimer;
             }
+          } else if (event.type === 'sources') {
+            // Sources event — store knowledge sources
+            const se = event as SourcesEvent;
+            session.messages[msgIndex].sources = se.sources;
           }
         }
       }

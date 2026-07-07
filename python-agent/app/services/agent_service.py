@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import re
 import time
 import uuid
@@ -15,6 +16,7 @@ from app.mcp.clients.memory_client import MemoryMCPClient
 from app.mcp.clients.audit_client import AuditMCPClient
 from app.mcp.clients.user_client import UserMCPClient
 
+logger = logging.getLogger(__name__)
 
 # ── Reject templates keyed by rejection_type ──
 
@@ -202,6 +204,9 @@ class AgentService:
         # ── simple / history: use pre-fetched retrieval ──
         rag_docs, keyword_docs = await retrieval_task
 
+        # ── Log GateKeeper result ──
+        logger.info(f"[RAG] GateKeeper: intent={gate.intent}, rewritten_query='{gate.rewritten_query}', needs_rag={gate.needs_rag}, needs_memory={gate.needs_memory}")
+
         async for token in self.process_with_gate(
             user_message=user_message,
             user_id=user_id,
@@ -276,19 +281,32 @@ class AgentService:
         if gate.needs_memory:
             try:
                 long_term_memories = await self.memory.search_long_term_memory(retrieval_query, user_id)
+                logger.info(f"[RAG] Memory: retrieved {len(long_term_memories)} long-term memories")
             except Exception:
                 pass
+
+        # ── Log retrieval results ──
+        logger.info(f"[RAG] Semantic: {len(rag_docs or [])} docs, Keyword: {len(keyword_docs or [])} docs")
 
         # ── RRF merge semantic + keyword ──
         if keyword_docs:
             rag_docs = self._merge_dedup(rag_docs or [], keyword_docs, settings_rrf_top_k=20)
+            logger.info(f"[RAG] After RRF merge: {len(rag_docs)} unique docs")
 
         # ── Rerank ──
         reranked_top = 0
+        sources: list[dict] = []
         if rag_docs:
             try:
                 rag_docs = await self.reranker.rerank(retrieval_query, rag_docs)
                 reranked_top = len(rag_docs)
+                # Extract top sources for citation
+                sources = [
+                    {"title": doc.get("title", "Unknown"), "score": round(doc.get("rrf_score", 0), 3)}
+                    for doc in rag_docs[:5]
+                ]
+                top_summaries = [f"{d.get('title', 'Unknown')}({d.get('rrf_score', 0):.3f})" for d in rag_docs[:3]]
+                logger.info(f"[RAG] Reranked top docs: {top_summaries}")
             except Exception:
                 pass
         if long_term_memories:
@@ -339,8 +357,9 @@ class AgentService:
         t2 = time.time()
         try:
             verification_result = await self.verification.verify(full_answer, user_message, rag_docs)
+            logger.info(f"[RAG] Verification: passed={verification_result.passed}, confidence={verification_result.confidence}, violations={verification_result.safety_violations}")
         except Exception:
-            pass
+            logger.info(f"[RAG] Verification: failed with exception")
 
         trace.verification = VerificationTrace(
             passed=verification_result.passed if verification_result else True,
@@ -352,6 +371,11 @@ class AgentService:
         disclaimer = self._build_disclaimer(verification_result)
         if disclaimer:
             yield {"type": "verification", "disclaimer": disclaimer, "confidence": trace.verification.confidence}
+
+        # ── Send sources event if RAG was used ──
+        if gate.intent in ("simple", "history") and sources:
+            logger.info(f"[RAG] Sending {len(sources)} sources: {[s['title'] for s in sources]}")
+            yield {"type": "sources", "sources": sources}
 
         trace.mark_total()
 

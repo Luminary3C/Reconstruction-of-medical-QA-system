@@ -30,8 +30,8 @@ async def chat_completions(request: ChatRequest, req: Request):
                 session_id=session_id,
                 short_term_context=short_term_ctx,
             ):
-                # Verification event: special SSE type
-                if isinstance(item, dict) and item.get("type") == "verification":
+                # Special SSE events (verification, sources)
+                if isinstance(item, dict) and item.get("type") in ("verification", "sources"):
                     yield f"data: {json.dumps(item)}\n\n"
                     continue
 

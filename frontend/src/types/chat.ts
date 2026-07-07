@@ -1,6 +1,12 @@
 export interface ChatMessage {
   role: 'user' | 'assistant' | 'system';
   content: string;
+  sources?: KnowledgeSource[];
+}
+
+export interface KnowledgeSource {
+  title: string;
+  score: number;
 }
 
 export interface Session {
@@ -40,7 +46,12 @@ export interface VerificationEvent {
   confidence: 'high' | 'medium' | 'low';
 }
 
-export type SSEEvent = string | VerificationEvent;
+export interface SourcesEvent {
+  type: 'sources';
+  sources: KnowledgeSource[];
+}
+
+export type SSEEvent = string | VerificationEvent | SourcesEvent;
 
 export interface JavaSessionSummary {
   sessionId: string;

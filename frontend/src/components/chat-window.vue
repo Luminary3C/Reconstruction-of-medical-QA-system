@@ -3,6 +3,7 @@ import { ref, watch, nextTick } from 'vue';
 import { useChatStore } from '@/stores/chat';
 import { useAutoScroll } from '@/composables/use-sse';
 import { renderMarkdown } from '@/composables/use-markdown';
+import type { KnowledgeSource } from '@/types/chat';
 
 const store = useChatStore();
 const inputText = ref('');
@@ -66,6 +67,16 @@ function isStreamingLast(i: number): boolean {
             v-html="renderContent(m)"
           ></div>
           <div v-else class="content">{{ m.content }}</div>
+          <!-- Knowledge sources citation -->
+          <div v-if="m.sources && m.sources.length > 0" class="knowledge-sources">
+            <div class="sources-header">📚 参考知识库</div>
+            <div class="sources-list">
+              <div v-for="(src, idx) in m.sources" :key="idx" class="source-item">
+                <span class="source-title">{{ src.title }}</span>
+                <span class="source-score">{{ (src.score * 100).toFixed(0) }}% 相关</span>
+              </div>
+            </div>
+          </div>
           <span v-if="isStreamingLast(i)" class="typing-cursor"></span>
         </div>
       </div>
@@ -238,6 +249,54 @@ function isStreamingLast(i: number): boolean {
 @keyframes blink {
   0%, 100% { opacity: 1; }
   50% { opacity: 0; }
+}
+
+.knowledge-sources {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid #e8edf2;
+}
+
+.sources-header {
+  font-size: 11px;
+  font-weight: 600;
+  color: #64748b;
+  margin-bottom: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.sources-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.source-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 10px;
+  background: #f8fafc;
+  border-radius: 6px;
+  border: 1px solid #e2e8f0;
+}
+
+.source-title {
+  font-size: 12px;
+  color: #334155;
+  max-width: 70%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.source-score {
+  font-size: 11px;
+  color: #94a3b8;
+  background: #f1f5f9;
+  padding: 2px 6px;
+  border-radius: 4px;
 }
 
 .input-area {

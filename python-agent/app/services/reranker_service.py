@@ -134,7 +134,7 @@ Return ONLY a JSON array of scores like [8.5, 2.0, 9.0]. No explanation."""
 
         try:
             response = await self.client.chat.completions.create(
-                model=settings.gatekeeper_model or settings.llm_model,
+                model=settings.reranker_model,
                 messages=[
                     {"role": "system", "content": self._SCORE_PROMPT},
                     {"role": "user", "content": user_prompt},
