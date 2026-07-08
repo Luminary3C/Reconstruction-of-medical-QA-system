@@ -25,6 +25,7 @@ dependencies = [
     "python-docx>=1.2.0",
     "pymupdf>=1.27.2.3",
     "langchain-text-splitters>=1.1.2",
+    "alembic>=1.18.5",
 ]
 
 [tool.hatch.build.targets.wheel]

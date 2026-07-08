@@ -34,6 +34,7 @@ public class ChatHistoryController {
 
     @DeleteMapping("/history/{sessionId}")
     public ApiResponse<Void> deleteHistory(@PathVariable String sessionId) {
+        mapper.deleteBySessionId(sessionId);
         return ApiResponse.success(null);
     }
 }

@@ -11,6 +11,19 @@ class EmbeddingService:
 
     EMBEDDING_DIM = settings.embedding_dim
 
+    def __init__(self):
+        self._api_client: AsyncOpenAI | None = None
+
+    @property
+    def api_client(self) -> AsyncOpenAI:
+        if self._api_client is None:
+            self._api_client = AsyncOpenAI(
+                base_url=settings.llm_base_url,
+                api_key=settings.llm_api_key or "sk-placeholder",
+                timeout=httpx.Timeout(30.0, connect=5.0),
+            )
+        return self._api_client
+
     async def embed(self, text: str) -> list[float]:
         if settings.embedding_mode == "api":
             return await self._api_embed(text)
@@ -42,28 +55,19 @@ class EmbeddingService:
 
     # ── API: real OpenAI-compatible embedding endpoint ──
 
-    def _get_client(self) -> AsyncOpenAI:
-        return AsyncOpenAI(
-            base_url=settings.llm_base_url,
-            api_key=settings.llm_api_key or "sk-placeholder",
-            timeout=httpx.Timeout(30.0, connect=5.0),
-        )
-
     async def _api_embed(self, text: str) -> list[float]:
-        client = self._get_client()
-        resp = await client.embeddings.create(
+        resp = await self.api_client.embeddings.create(
             model=settings.embedding_model,
             input=text,
         )
         return resp.data[0].embedding
 
     async def _api_embed_batch(self, texts: list[str]) -> list[list[float]]:
-        client = self._get_client()
         # Batch in chunks of 100
         results: list[list[float]] = []
         for batch_start in range(0, len(texts), 100):
             batch = texts[batch_start:batch_start + 100]
-            resp = await client.embeddings.create(
+            resp = await self.api_client.embeddings.create(
                 model=settings.embedding_model,
                 input=batch,
             )

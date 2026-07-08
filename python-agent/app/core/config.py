@@ -4,7 +4,7 @@ from pathlib import Path
 class Settings(BaseSettings):
     # Server
     server_host: str = "0.0.0.0"
-    server_port: int = 8001
+    server_port: int = 8000
 
     # LLM
     llm_base_url: str = "https://api.openai.com/v1"

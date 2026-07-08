@@ -352,25 +352,17 @@ class AgentService:
             latency_ms=round((time.time() - t1) * 1000, 1),
         )
 
-        # ── Sync verification after stream ends ──
-        verification_result = None
-        t2 = time.time()
-        try:
-            verification_result = await self.verification.verify(full_answer, user_message, rag_docs)
-            logger.info(f"[RAG] Verification: passed={verification_result.passed}, confidence={verification_result.confidence}, violations={verification_result.safety_violations}")
-        except Exception:
-            logger.info(f"[RAG] Verification: failed with exception")
+        # ── Async verification (fire-and-forget, no stream blocking) ──
+        asyncio.create_task(self._verify_and_notify(
+            full_answer, user_message, rag_docs, gate, sources, trace,
+        ))
 
-        trace.verification = VerificationTrace(
-            passed=verification_result.passed if verification_result else True,
-            confidence=verification_result.confidence if verification_result else "unknown",
-            safety_violations=verification_result.safety_violations if verification_result else [],
-            latency_ms=round((time.time() - t2) * 1000, 1),
-        )
+        # ── Send sources event if RAG was used ──
+        if gate.intent in ("simple", "history") and sources:
+            logger.info(f"[RAG] Sending {len(sources)} sources: {[s['title'] for s in sources]}")
+            yield {"type": "sources", "sources": sources}
 
-        disclaimer = self._build_disclaimer(verification_result, gate, rag_docs)
-        if disclaimer:
-            yield {"type": "verification", "disclaimer": disclaimer, "confidence": trace.verification.confidence}
+        trace.mark_total()
 
         # ── Send sources event if RAG was used ──
         if gate.intent in ("simple", "history") and sources:
@@ -401,6 +393,36 @@ class AgentService:
             "- 年龄和性别？\n\n"
             "补充更多细节后，我能更好帮你分析。"
         )
+
+    # ────────────────────
+    # Async verification + audit
+    # ────────────────────
+
+    async def _verify_and_notify(
+        self, full_answer: str, user_message: str, rag_docs: list[dict],
+        gate, sources: list[dict], trace: TraceContext,
+    ):
+        """Run verification after streaming completes, update trace and audit."""
+        verification_result = None
+        t2 = time.time()
+        try:
+            verification_result = await self.verification.verify(full_answer, user_message, rag_docs)
+            logger.info(f"[RAG] Verification: passed={verification_result.passed}, confidence={verification_result.confidence}, violations={verification_result.safety_violations}")
+        except Exception:
+            logger.info("[RAG] Verification: failed with exception")
+
+        trace.verification = VerificationTrace(
+            passed=verification_result.passed if verification_result else True,
+            confidence=verification_result.confidence if verification_result else "unknown",
+            safety_violations=verification_result.safety_violations if verification_result else [],
+            latency_ms=round((time.time() - t2) * 1000, 1),
+        )
+
+        disclaimer = self._build_disclaimer(verification_result)
+        if disclaimer:
+            logger.info(f"[RAG] Verification disclaimer generated: confidence={trace.verification.confidence}")
+
+        await self._post_process(gate, trace.user_id, trace.session_id, user_message, full_answer, rag_docs, trace)
 
     # ────────────────────
     # RRF merge (unchanged)

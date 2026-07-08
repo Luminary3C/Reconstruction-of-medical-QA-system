@@ -1,5 +1,5 @@
 import { javaClient } from './client';
-import type { JavaChatRequest, JavaChatMessage, LoginRequest, LoginResponse, JavaSessionSummary, SSEEvent, VerificationEvent } from '@/types/chat';
+import type { JavaChatRequest, JavaChatMessage, LoginRequest, LoginResponse, JavaSessionSummary, SSEEvent, VerificationEvent, SourcesEvent } from '@/types/chat';
 import type { ApiResponse } from '@/types/api';
 
 export async function login(req: LoginRequest): Promise<LoginResponse> {
@@ -61,6 +61,31 @@ export async function* streamChatJava(req: JavaChatRequest): AsyncGenerator<SSEE
         } catch { /* skip */ }
         continue;
       }
+
+      // Sources named event from Java SSE relay
+      if (currentEvent === 'sources') {
+        currentEvent = '';
+        try {
+          const parsed = JSON.parse(payload) as SourcesEvent;
+          if (parsed.type === 'sources') {
+            yield parsed;
+          }
+        } catch { /* skip */ }
+        continue;
+      }
+
+      // Try parsing inline JSON events (Python Agent direct style)
+      try {
+        const parsed = JSON.parse(payload);
+        if (parsed.type === 'verification') {
+          yield parsed as VerificationEvent;
+          continue;
+        }
+        if (parsed.type === 'sources') {
+          yield parsed as SourcesEvent;
+          continue;
+        }
+      } catch { /* not JSON */ }
 
       // Normal text token
       yield payload;

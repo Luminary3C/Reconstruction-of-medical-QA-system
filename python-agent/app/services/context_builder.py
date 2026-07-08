@@ -34,6 +34,7 @@ class ContextBuilder:
             )
         # simple / default
         return self.simple_qa.render(
+            user_query=user_query,
             rag_docs=rag_docs or [],
         )
 

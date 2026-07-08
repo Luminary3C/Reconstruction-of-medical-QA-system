@@ -6,6 +6,8 @@ from app.api.v1.knowledge import router as knowledge_router
 from app.core.config import settings
 from app.services.agent_service import AgentService
 
+logger = logging.getLogger(__name__)
+
 # Configure logging to output to console
 logging.basicConfig(
     level=logging.INFO,
@@ -14,8 +16,21 @@ logging.basicConfig(
 )
 
 
+def _run_alembic_upgrade():
+    """Run Alembic migrations on startup to ensure DB schema is up-to-date."""
+    try:
+        from alembic.config import Config as AlembicConfig
+        from alembic import command
+        alembic_cfg = AlembicConfig("alembic.ini")
+        command.upgrade(alembic_cfg, "head")
+        logger.info("Alembic migrations applied successfully")
+    except Exception as e:
+        logger.warning("Alembic migration skipped (DB may not be ready): %s", e)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    _run_alembic_upgrade()
     agent = AgentService()
     await agent.connect()
     app.state.agent_service = agent

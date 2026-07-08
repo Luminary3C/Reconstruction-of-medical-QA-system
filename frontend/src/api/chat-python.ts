@@ -1,5 +1,8 @@
-import type { PythonChatRequest, SSEEvent, VerificationEvent } from '@/types/chat';
-import type { SSEChunk } from '@/types/api';
+import type { PythonChatRequest, SSEEvent, VerificationEvent, SourcesEvent } from '@/types/chat';
+
+interface SSEChunk {
+  choices: { delta: { content?: string } }[];
+}
 
 const AGENT_URL = '/v1';
 
@@ -39,14 +42,16 @@ export async function* streamChatPython(req: PythonChatRequest): AsyncGenerator<
       if (!trimmed.startsWith('data: ') || trimmed === 'data: [DONE]') continue;
       const payload = trimmed.slice(6).trimStart();
 
-      // Check for verification event (JSON with type: "verification")
       try {
         const parsed = JSON.parse(payload);
         if (parsed.type === 'verification') {
           yield parsed as VerificationEvent;
           continue;
         }
-        // Normal SSE chunk
+        if (parsed.type === 'sources') {
+          yield parsed as SourcesEvent;
+          continue;
+        }
         const chunk = parsed as SSEChunk;
         const content = chunk.choices[0]?.delta?.content;
         if (content) yield content;

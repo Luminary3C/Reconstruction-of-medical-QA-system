@@ -2,16 +2,15 @@
 User MCP Client — HTTP transport to Java User MCP Server (Resources).
 """
 import asyncio
-import os
 import httpx
+from app.core.config import settings
 
 
 class UserMCPClient:
 
     def __init__(self):
-        base = os.getenv("JAVA_MCP_URL", "http://localhost:8080/mcp")
-        self._endpoint = base + "/user"
-        self._enabled = os.getenv("MCP_ENABLED", "true").lower() == "true"
+        self._endpoint = settings.java_mcp_url + "/user"
+        self._enabled = settings.mcp_enabled
         self._client = httpx.AsyncClient(timeout=0.5)
 
     async def connect(self):

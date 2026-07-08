@@ -1,5 +1,7 @@
 package com.rag.gateway.mcp;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.rag.gateway.dto.ApiResponse;
 import com.rag.gateway.model.AgentTrace;
 import com.rag.gateway.repository.pg.TraceMapper;
@@ -15,9 +17,11 @@ public class AuditToolHandler {
 
     private static final Logger log = LoggerFactory.getLogger(AuditToolHandler.class);
     private final TraceMapper traceMapper;
+    private final ObjectMapper objectMapper;
 
-    public AuditToolHandler(TraceMapper traceMapper) {
+    public AuditToolHandler(TraceMapper traceMapper, ObjectMapper objectMapper) {
         this.traceMapper = traceMapper;
+        this.objectMapper = objectMapper;
     }
 
     public ApiResponse<?> auditLog(Map<String, Object> body) {
@@ -56,11 +60,14 @@ public class AuditToolHandler {
         }
     }
 
-    private static String toJsonString(Object obj) {
+    private String toJsonString(Object obj) {
         if (obj == null) return "{}";
         if (obj instanceof String) return (String) obj;
-        // Map or other objects — Jackson not available, use simple toString fallback
-        return obj.toString();
+        try {
+            return objectMapper.writeValueAsString(obj);
+        } catch (JsonProcessingException e) {
+            return "{}";
+        }
     }
 
     private static Double toDouble(Object obj) {

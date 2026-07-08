@@ -83,9 +83,14 @@ public class PythonAgentClient {
                     try {
                         JsonNode node = objectMapper.readTree(jsonStr);
 
-                        // Check for verification event from Python Agent
-                        if ("verification".equals(node.path("type").asText())) {
+                        // Check for special events from Python Agent
+                        String eventType = node.path("type").asText();
+                        if ("verification".equals(eventType)) {
                             emitter.send(SseEmitter.event().name("verification").data(jsonStr));
+                            return;
+                        }
+                        if ("sources".equals(eventType)) {
+                            emitter.send(SseEmitter.event().name("sources").data(jsonStr));
                             return;
                         }
 

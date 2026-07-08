@@ -54,4 +54,7 @@ public interface ChatMessageMapper {
             "ORDER BY created_at DESC LIMIT #{limit}")
     List<ChatMessage> findRecentByUser(@Param("userId") String userId,
                                         @Param("limit") int limit);
+
+    @Delete("DELETE FROM chat_messages WHERE session_id = #{sessionId}")
+    int deleteBySessionId(@Param("sessionId") String sessionId);
 }

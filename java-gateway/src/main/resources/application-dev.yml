@@ -55,7 +55,7 @@ server:
 # Python Agent endpoint
 agent:
   python:
-    url: ${AGENT_URL:http://localhost:8001}
+    url: ${AGENT_URL:http://localhost:8000}
 
 # JWT config
 jwt:
