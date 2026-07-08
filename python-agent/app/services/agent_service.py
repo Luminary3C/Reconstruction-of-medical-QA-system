@@ -309,7 +309,7 @@ class AgentService:
                         "score": round(doc.get("rrf_score", 0), 3),
                         "similarity": round(doc.get("similarity", 0), 3),
                     }
-                    for doc in rag_docs[:5]
+                    for doc in rag_docs[:3]
                 ]
                 top_summaries = [f"{d.get('title', 'Unknown')}({d.get('rrf_score', 0):.3f})" for d in rag_docs[:3]]
                 logger.info(f"[RAG] Reranked top docs: {top_summaries}")
