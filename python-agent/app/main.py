@@ -16,21 +16,38 @@ logging.basicConfig(
 )
 
 
-def _run_alembic_upgrade():
+async def _run_alembic_upgrade():
     """Run Alembic migrations on startup to ensure DB schema is up-to-date."""
     try:
         from alembic.config import Config as AlembicConfig
-        from alembic import command
+        from alembic.runtime.migration import MigrationContext
+        from alembic.script import ScriptDirectory
+        from app.db.pgvector_client import engine
+
         alembic_cfg = AlembicConfig("alembic.ini")
-        command.upgrade(alembic_cfg, "head")
-        logger.info("Alembic migrations applied successfully")
+        script = ScriptDirectory.from_config(alembic_cfg)
+
+        async with engine.begin() as connection:
+            def _upgrade(conn):
+                context = MigrationContext.configure(conn)
+                current = context.get_current_revision()
+                head = script.get_current_head()
+                if current != head:
+                    from alembic import command
+                    alembic_cfg.attributes["connection"] = connection
+                    command.upgrade(alembic_cfg, "head")
+                    logger.info("Alembic migrations applied: %s → %s", current, head)
+                else:
+                    logger.info("Alembic schema up-to-date: %s", current)
+
+            await connection.run_sync(_upgrade)
     except Exception as e:
         logger.warning("Alembic migration skipped (DB may not be ready): %s", e)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    _run_alembic_upgrade()
+    await _run_alembic_upgrade()
     agent = AgentService()
     await agent.connect()
     app.state.agent_service = agent
