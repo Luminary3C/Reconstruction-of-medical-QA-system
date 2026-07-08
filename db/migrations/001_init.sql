@@ -18,3 +18,6 @@ CREATE INDEX IF NOT EXISTS idx_chat_messages_session
 
 CREATE INDEX IF NOT EXISTS idx_chat_messages_user
     ON chat_messages(user_id);
+
+CREATE INDEX IF NOT EXISTS idx_chat_messages_embedding
+    ON chat_messages USING hnsw (embedding vector_cosine_ops);

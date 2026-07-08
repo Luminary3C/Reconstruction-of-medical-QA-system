@@ -20,6 +20,5 @@ CREATE TABLE IF NOT EXISTS knowledge_chunks (
 
 CREATE INDEX IF NOT EXISTS idx_chunks_document ON knowledge_chunks(document_id);
 
--- IVFFlat index for cosine similarity (requires rows > lists; safe to create with empty table)
 CREATE INDEX IF NOT EXISTS idx_chunks_embedding ON knowledge_chunks
-    USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100);
+    USING hnsw (embedding vector_cosine_ops);
