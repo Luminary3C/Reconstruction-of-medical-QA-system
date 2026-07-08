@@ -1,4 +1,5 @@
 import json
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 from sqlalchemy import text
 from app.core.config import settings
 from app.db.pgvector_client import get_session
@@ -104,18 +105,11 @@ class VectorStore:
         return False
 
     def _split_text(self, content: str) -> list[str]:
-        """Simple sliding-window text splitter."""
-        size = settings.chunk_size
-        overlap = settings.chunk_overlap
-        chunks: list[str] = []
-        start = 0
-        while start < len(content):
-            end = start + size
-            chunks.append(content[start:end])
-            start += size - overlap
-            if start >= len(content):
-                break
-            # Avoid infinite loop if overlap >= size
-            if size - overlap <= 0:
-                break
-        return chunks
+        """Recursive character text splitter — splits on paragraph/line/sentence boundaries."""
+        splitter = RecursiveCharacterTextSplitter(
+            chunk_size=settings.chunk_size,
+            chunk_overlap=settings.chunk_overlap,
+            separators=["\n\n", "\n", "。", "！", "？", ".", "!", "?", " ", ""],
+            length_function=len,
+        )
+        return splitter.split_text(content)
