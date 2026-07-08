@@ -6,7 +6,10 @@ export interface ChatMessage {
 
 export interface KnowledgeSource {
   title: string;
+  chunk_index: number;
+  content: string;
   score: number;
+  similarity: number;
 }
 
 export interface Session {

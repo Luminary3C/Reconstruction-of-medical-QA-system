@@ -300,9 +300,15 @@ class AgentService:
             try:
                 rag_docs = await self.reranker.rerank(retrieval_query, rag_docs)
                 reranked_top = len(rag_docs)
-                # Extract top sources for citation
+                # Extract top sources with chunk content for citation
                 sources = [
-                    {"title": doc.get("title", "Unknown"), "score": round(doc.get("rrf_score", 0), 3)}
+                    {
+                        "title": doc.get("title", "Unknown"),
+                        "chunk_index": doc.get("chunk_index", 0),
+                        "content": doc.get("content", ""),
+                        "score": round(doc.get("rrf_score", 0), 3),
+                        "similarity": round(doc.get("similarity", 0), 3),
+                    }
                     for doc in rag_docs[:5]
                 ]
                 top_summaries = [f"{d.get('title', 'Unknown')}({d.get('rrf_score', 0):.3f})" for d in rag_docs[:3]]
